@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ocean Governing Equations</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400&family=Inter:wght@300;400;500&display=swap');
+
+  :root {
+    --bg:        #060b12;
+    --bg-card:   rgba(10, 18, 32, 0.88);
+    --bg-panel:  rgba(8, 14, 28, 0.94);
+    --border:    rgba(120, 160, 200, 0.10);
+    --border-hi: rgba(120, 160, 200, 0.22);
+    --text:      #9ab0c8;
+    --text-hi:   #d0dce8;
+    --text-lo:   #586878;
+    --blue:      #6aa4d4;
+    --green:     #6ec4a0;
+    --amber:     #c8a468;
+    --violet:    #9888c8;
+    --serif:     'EB Garamond', 'Georgia', serif;
+    --sans:      'Inter', -apple-system, sans-serif;
+    --mono:      'JetBrains Mono', 'Menlo', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Deep ocean background ── */
+  canvas#bgCanvas {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
+
+  .ocean-gradient {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background:
+      radial-gradient(ellipse 60% 55% at 50% 52%,
+        rgba(12, 32, 58, 0.5) 0%,
+        transparent 70%),
+      radial-gradient(ellipse 100% 100% at 50% 100%,
+        rgba(6, 18, 38, 0.8) 0%,
+        transparent 60%);
+    pointer-events: none;
+  }
+
+  /* ── Header ── */
+  .header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 18px 32px 14px;
+    background: linear-gradient(180deg, rgba(6, 11, 18, 0.92) 0%, rgba(6, 11, 18, 0) 100%);
+  }
+
+  .header-title {
+    font-family: var(--serif);
+    font-size: 19px;
+    font-weight: 400;
+    color: var(--text-hi);
+    letter-spacing: 0.3px;
+  }
+
+  .header-title em {
+    font-style: italic;
+    color: var(--text);
+    font-weight: 400;
+  }
+
+  .filter-bar {
+    display: flex;
+    gap: 4px;
+  }
+
+  .filter-btn {
+    padding: 4px 14px;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--text-lo);
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.6px;
+    text-transform: lowercase;
+    cursor: pointer;
+    transition: all 0.4s;
+  }
+
+  .filter-btn:hover { color: var(--text); }
+
+  .filter-btn.active {
+    color: var(--text-hi);
+    border-bottom: 1px solid var(--text-lo);
+  }
+
+  /* ── Star layout ── */
+  .star-container {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+  }
+
+  .star-svg {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .star-line {
+    stroke: var(--border);
+    stroke-width: 0.5;
+    stroke-dasharray: 4 6;
+    transition: all 0.6s ease;
+  }
+
+  .star-line.highlight {
+    stroke: var(--blue);
+    stroke-width: 1;
+    stroke-dasharray: none;
+    opacity: 0.6;
+  }
+
+  /* ── Center node ── */
+  .center-node {
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 38% 35%,
+        rgba(14, 36, 68, 0.7) 0%,
+        rgba(8, 20, 42, 0.85) 50%,
+        rgba(6, 12, 24, 0.95) 100%);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    cursor: default;
+    padding: 28px;
+    text-align: center;
+    transition: border-color 0.6s;
+  }
+
+  .center-node::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 38% 35%, rgba(100, 160, 220, 0.04), transparent 60%);
+    pointer-events: none;
+  }
+
+  .center-label {
+    font-family: var(--sans);
+    font-size: 9px;
+    font-weight: 400;
+    color: var(--text-lo);
+    text-transform: uppercase;
+    letter-spacing: 2.5px;
+    margin-bottom: 12px;
+  }
+
+  .center-eq {
+    font-size: 15px;
+    color: var(--text-hi);
+    line-height: 1.8;
+  }
+
+  .center-sublabel {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 12px;
+    color: var(--text-lo);
+    margin-top: 14px;
+  }
+
+  /* ── Term nodes ── */
+  .term-node {
+    position: absolute;
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    cursor: pointer;
+    transition: all 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
+    text-align: center;
+    padding: 10px;
+    backdrop-filter: blur(8px);
+  }
+
+  .term-node:hover {
+    border-color: var(--border-hi);
+    background: rgba(14, 24, 44, 0.92);
+    transform: scale(1.06);
+    z-index: 20;
+  }
+
+  .term-node.selected {
+    z-index: 20;
+    transform: scale(1.08);
+  }
+
+  .term-node[data-type="momentum"].selected { border-color: var(--blue); }
+  .term-node[data-type="tracer"].selected { border-color: var(--green); }
+  .term-node[data-type="closure"].selected { border-color: var(--amber); }
+  .term-node[data-type="constraint"].selected { border-color: var(--violet); }
+
+  .term-node.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.7);
+  }
+
+  .term-label {
+    font-family: var(--sans);
+    font-size: 8px;
+    font-weight: 400;
+    color: var(--text-lo);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin-bottom: 6px;
+  }
+
+  .term-eq {
+    font-size: 13px;
+    color: var(--text-hi);
+  }
+
+  .term-type-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    margin-top: 8px;
+    opacity: 0.5;
+  }
+
+  .term-node[data-type="momentum"] .term-type-dot { background: var(--blue); }
+  .term-node[data-type="tracer"] .term-type-dot { background: var(--green); }
+  .term-node[data-type="closure"] .term-type-dot { background: var(--amber); }
+  .term-node[data-type="constraint"] .term-type-dot { background: var(--violet); }
+
+  /* ── Detail panel ── */
+  .detail-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 500px;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    z-index: 200;
+    overflow-y: auto;
+    transform: translateX(100%);
+    transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
+    padding: 40px 36px 36px;
+    backdrop-filter: blur(30px);
+  }
+
+  .detail-panel.open { transform: translateX(0); }
+
+  .detail-panel::-webkit-scrollbar { width: 4px; }
+  .detail-panel::-webkit-scrollbar-track { background: transparent; }
+  .detail-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .detail-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 24px;
+    height: 24px;
+    border-radius: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-lo);
+    font-size: 18px;
+    cursor: pointer;
+    transition: color 0.3s;
+    font-family: var(--sans);
+  }
+
+  .detail-close:hover { color: var(--text-hi); }
+
+  .detail-overline {
+    font-family: var(--sans);
+    font-size: 9px;
+    font-weight: 400;
+    color: var(--text-lo);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .detail-title {
+    font-family: var(--serif);
+    font-size: 26px;
+    font-weight: 400;
+    color: var(--text-hi);
+    margin-bottom: 20px;
+    line-height: 1.3;
+  }
+
+  .detail-continuous {
+    background: rgba(12, 24, 48, 0.5);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 20px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+
+  .detail-continuous-label {
+    font-size: 8px;
+    color: var(--text-lo);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+
+  .detail-continuous-eq {
+    font-size: 20px;
+    color: var(--text-hi);
+  }
+
+  .detail-description {
+    font-family: var(--serif);
+    font-size: 15px;
+    color: var(--text);
+    line-height: 1.75;
+    margin-bottom: 28px;
+  }
+
+  .detail-section-title {
+    font-family: var(--sans);
+    font-size: 9px;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-lo);
+    margin: 32px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Model comparison table ── */
+  .model-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 24px;
+  }
+
+  .model-table th {
+    text-align: left;
+    padding: 8px 10px 8px 0;
+    color: var(--text-lo);
+    font-family: var(--sans);
+    font-weight: 400;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .model-table td {
+    padding: 10px 10px 10px 0;
+    border-bottom: 1px solid rgba(120, 160, 200, 0.05);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+
+  .model-table tr:hover { background: rgba(120, 160, 200, 0.03); }
+
+  .model-name {
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: 11px;
+    color: var(--text-hi);
+    white-space: nowrap;
+  }
+
+  .model-org {
+    font-family: var(--sans);
+    font-size: 9px;
+    color: var(--text-lo);
+    margin-top: 2px;
+  }
+
+  .scheme-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 300;
+    letter-spacing: 0.3px;
+  }
+
+  .sf-0 { background: rgba(106, 164, 212, 0.12); color: var(--blue); }
+  .sf-1 { background: rgba(110, 196, 160, 0.12); color: var(--green); }
+  .sf-2 { background: rgba(200, 164, 104, 0.12); color: var(--amber); }
+  .sf-3 { background: rgba(152, 136, 200, 0.12); color: var(--violet); }
+  .sf-4 { background: rgba(200, 120, 130, 0.12); color: #c88088; }
+  .sf-5 { background: rgba(160, 190, 120, 0.12); color: #a8c080; }
+
+  .scheme-detail {
+    font-family: var(--sans);
+    font-size: 11px;
+    color: var(--text);
+    margin-top: 3px;
+  }
+
+  .prop-item {
+    font-family: var(--sans);
+    font-size: 10px;
+    color: var(--text-lo);
+    padding: 1px 0;
+  }
+
+  .prop-item::before {
+    content: '\2014\00a0';
+    opacity: 0.4;
+  }
+
+  /* ── Family summary ── */
+  .family-group {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 5px 0;
+  }
+
+  .family-models {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-lo);
+  }
+
+  /* ── Legend ── */
+  .legend {
+    position: fixed;
+    bottom: 24px;
+    left: 32px;
+    z-index: 100;
+    display: flex;
+    gap: 20px;
+    font-family: var(--sans);
+    font-size: 10px;
+    color: var(--text-lo);
+    letter-spacing: 0.5px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    opacity: 0.6;
+  }
+
+  .info-hint {
+    position: fixed;
+    bottom: 24px;
+    right: 32px;
+    z-index: 100;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 12px;
+    color: var(--text-lo);
+    opacity: 0.6;
+    transition: opacity 2s;
+  }
+
+  .info-hint.fade { opacity: 0; }
+
+  /* ── Tooltip ── */
+  .tooltip {
+    position: fixed;
+    z-index: 300;
+    background: rgba(6, 11, 18, 0.95);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px 16px;
+    max-width: 280px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    backdrop-filter: blur(16px);
+  }
+
+  .tooltip.visible { opacity: 1; }
+
+  .tooltip-title {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-hi);
+    margin-bottom: 6px;
+  }
+
+  .tooltip-body {
+    font-family: var(--sans);
+    font-size: 11px;
+    color: var(--text-lo);
+    line-height: 1.6;
+  }
+
+  @media (max-width: 900px) {
+    .detail-panel { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+<div class="ocean-gradient"></div>
+
+<div class="header">
+  <div class="header-title">Ocean Governing Equations <em>--- mechanism decomposition across 14 models</em></div>
+  <div class="filter-bar">
+    <button class="filter-btn active" data-filter="all">all</button>
+    <button class="filter-btn" data-filter="momentum">momentum</button>
+    <button class="filter-btn" data-filter="tracer">tracer</button>
+    <button class="filter-btn" data-filter="closure">closure</button>
+    <button class="filter-btn" data-filter="constraint">constraint</button>
+  </div>
+</div>
+
+<div class="star-container" id="starContainer">
+  <svg class="star-svg" id="starSvg"></svg>
+</div>
+
+<div class="detail-panel" id="detailPanel">
+  <button class="detail-close" id="detailClose">&times;</button>
+  <div id="detailContent"></div>
+</div>
+
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-title" id="tooltipTitle"></div>
+  <div class="tooltip-body" id="tooltipBody"></div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div> momentum</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> tracer</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div> closure</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--violet)"></div> constraint</div>
+</div>
+
+<div class="info-hint" id="infoHint">select a term to compare discretizations</div>
+
+<script>
+// ═══════════════════════════════════════
+// BACKGROUND: subtle drifting particles
+// ═══════════════════════════════════════
+(function(){
+  const c = document.getElementById('bgCanvas');
+  const ctx = c.getContext('2d');
+  let w, h, particles = [];
+
+  function resize() {
+    w = c.width = window.innerWidth;
+    h = c.height = window.innerHeight;
+  }
+
+  function init() {
+    resize();
+    particles = [];
+    const n = Math.floor((w * h) / 8000);
+    for (let i = 0; i < n; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        r: Math.random() * 1.2 + 0.2,
+        dx: (Math.random() - 0.5) * 0.12,
+        dy: (Math.random() - 0.5) * 0.08,
+        o: Math.random() * 0.25 + 0.03
+      });
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+    for (const p of particles) {
+      p.x += p.dx;
+      p.y += p.dy;
+      if (p.x < 0) p.x = w;
+      if (p.x > w) p.x = 0;
+      if (p.y < 0) p.y = h;
+      if (p.y > h) p.y = 0;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(140, 180, 220, ${p.o})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', () => { resize(); });
+  init();
+  draw();
+})();
+
+// ═══════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════
+const equationTerms = [
+  { id:"tendency", latex:"\\frac{\\partial \\mathbf{u}}{\\partial t}", label:"Tendency", type:"momentum",
+    description:"Time rate of change of the velocity field. The discrete form depends on the time-stepping scheme chosen: leapfrog uses three time levels, Adams-Bashforth extrapolates from two, and semi-implicit methods treat fast and slow modes at different time levels.",
+    physical:"All other terms contribute tendencies that update this. The scheme choice (leapfrog, AB3-AM4, RK3, ADI, semi-implicit) determines temporal accuracy and stability constraints." },
+  { id:"coriolis", latex:"(\\zeta+f)\\,\\hat{k}\\times\\mathbf{u}", label:"Coriolis", type:"momentum",
+    description:"Coriolis and relative vorticity in vector-invariant form. The parameter f encodes Earth's rotation; \u03B6 is the curl of the velocity field itself.",
+    physical:"Dominant at scales where the Rossby number is small. The discrete Coriolis must preserve energy and enstrophy to suppress computational noise on the grid scale." },
+  { id:"pressure", latex:"-\\frac{1}{\\rho_0}\\nabla p", label:"Pressure Gradient", type:"momentum",
+    description:"Horizontal pressure gradient force, decomposed into barotropic (sea surface slope) and baroclinic (internal density structure) components.",
+    physical:"Primary driver of ocean circulation. In terrain-following coordinates this is notoriously difficult to compute cleanly, as coordinate surfaces tilt with topography." },
+  { id:"h_viscosity", latex:"\\mathcal{D}_h(\\mathbf{u})", label:"Horiz. Viscosity", type:"momentum",
+    description:"Horizontal momentum diffusion parameterizing sub-grid-scale turbulent transfer.",
+    physical:"Laplacian (\u2207\u00B2), biharmonic (\u2207\u2074), or flow-dependent (Smagorinsky). Higher-order operators are more scale-selective, dissipating grid noise while preserving large-scale flow." },
+  { id:"v_mixing", latex:"\\partial_z(\\nu\\,\\partial_z \\mathbf{u})", label:"Vertical Mixing", type:"closure",
+    description:"Vertical eddy viscosity controlled by a turbulence closure. This is the highest-uncertainty mechanism axis --- it determines mixed-layer depth, SST, and air-sea coupling.",
+    physical:"KPP uses a diagnosed boundary-layer depth with a non-local term. TKE and GLS solve prognostic equations for turbulent kinetic energy. Each yields different \u03BD profiles from the same forcing." },
+  { id:"advection_t", latex:"\\nabla\\!\\cdot\\!(h\\mathbf{u}\\,C)", label:"Tracer Advection", type:"tracer",
+    description:"Transport of temperature, salinity, and passive tracers by the resolved velocity. The scheme choice directly controls numerical diffusion.",
+    physical:"PPM resolves fronts at 2\u0394x; first-order upwind smears them to 10\u0394x. FCT applies an anti-diffusion correction. ELM back-tracks along characteristics for unconditional stability." },
+  { id:"t_diffusion", latex:"\\nabla\\!\\cdot\\!(\\kappa\\,\\nabla C)", label:"Tracer Diffusion", type:"tracer",
+    description:"Tracer mixing, split into isoneutral (along-density-surface, Redi) and diapycnal (cross-density) components. Gent-McWilliams parameterizes eddy restratification.",
+    physical:"Isoneutral diffusion prevents spurious water-mass transformation. GM thickness diffusion flattens isopycnals, representing the net effect of baroclinic instability at unresolved scales." },
+  { id:"eos", latex:"\\rho = f(\\Theta,\\, S_A,\\, p)", label:"Equation of State", type:"closure",
+    description:"Thermodynamic closure relating Conservative Temperature, Absolute Salinity, and pressure to density. TEOS-10 is the current international standard.",
+    physical:"The EOS nonlinearity (cabbeling, thermobaricity) means mixing two water masses produces denser water than their mean. Small differences between formulations (\u223C0.01 kg/m\u00B3) accumulate over centennial integrations." },
+  { id:"hydrostatic", latex:"\\frac{\\partial p}{\\partial z} = -\\rho\\, g", label:"Hydrostatic", type:"constraint",
+    description:"Vertical pressure gradient equals gravitational force. Most ocean models assume this exactly. MITgcm and SCHISM can solve the full non-hydrostatic pressure.",
+    physical:"Valid when H/L \u226A 1. Breaks down in convective plumes, near steep topography, and for internal solitary waves. Relaxing it requires a 3D pressure Poisson solve." },
+  { id:"continuity", latex:"\\partial_t h + \\nabla\\!\\cdot\\!(h\\mathbf{u}) = 0", label:"Continuity", type:"constraint",
+    description:"Mass conservation in layer form. The discrete continuity must be exactly consistent with tracer advection to prevent spurious sources and sinks.",
+    physical:"In ALE models, this is followed by regridding (choosing new vertical levels) and remapping (conservatively interpolating all fields onto those levels)." },
+  { id:"barotropic", latex:"\\partial_t \\eta + \\nabla\\!\\cdot\\!(H\\bar{\\mathbf{u}}) = 0", label:"Barotropic Mode", type:"momentum",
+    description:"The fast, vertically-averaged mode: surface gravity waves propagating at \u223C200 m/s. Separated from the slow baroclinic mode in most models.",
+    physical:"Split-explicit models sub-step the barotropic mode. Implicit models solve a global 2D system each step. Semi-implicit models (SCHISM, MOHID) treat it implicitly within a single step." },
+  { id:"vert_coord", latex:"z \\;\\longrightarrow\\; s(x,y,z,t)", label:"Vertical Coord.", type:"constraint",
+    description:"The coordinate transformation mapping physical space to computational space. Each choice preserves certain physics exactly at the cost of artifacts elsewhere.",
+    physical:"z-levels: staircase topography. Sigma: pressure gradient error over slopes. Isopycnal: fails in weakly stratified layers. ALE: remapping diffusion is O(\u0394z\u00B3) with PPM reconstruction." }
+];
+
+const models = [
+  { id:"MOM6",   name:"MOM6",      org:"GFDL",       color:"#6aa4d4" },
+  { id:"NEMO",   name:"NEMO",      org:"EU",         color:"#6ec4a0" },
+  { id:"ROMS",   name:"ROMS",      org:"Rutgers",    color:"#c8a468" },
+  { id:"HYCOM",  name:"HYCOM",     org:"NRL",        color:"#9888c8" },
+  { id:"MITgcm", name:"MITgcm",    org:"MIT",        color:"#c88088" },
+  { id:"BLOM",   name:"BLOM",      org:"NorESM",     color:"#80b8b8" },
+  { id:"FESOM2", name:"FESOM2",    org:"AWI",        color:"#b8a860" },
+  { id:"SCHISM", name:"SCHISM",    org:"VIMS",       color:"#a0c080" },
+  { id:"GETM",   name:"GETM",     org:"IOW",        color:"#78b0d0" },
+  { id:"MOHID",  name:"MOHID",    org:"IST",        color:"#c090a0" },
+  { id:"ADCIRC", name:"ADCIRC",   org:"UNC",        color:"#8898b0" },
+  { id:"GOTM",   name:"GOTM",     org:"BB",         color:"#a0a088" },
+  { id:"FUNWAVE",name:"FUNWAVE",  org:"USACE",      color:"#70c8b0" },
+  { id:"XBeach", name:"XBeach",   org:"Deltares",   color:"#c8b070" }
+];
+
+const D = {
+  MOM6:{
+    tendency:{s:"Forward + ALE remap",f:"Euler",p:["ALE remapping sub-step"]},
+    coriolis:{s:"Arakawa-Hsu (1990)",f:"Energy-enstrophy",p:["Energy and enstrophy conserving"]},
+    pressure:{s:"Analytically-integrated FV",f:"Analytic-FV",p:["Minimal PGF error"]},
+    h_viscosity:{s:"Biharmonic + Smagorinsky",f:"Biharmonic",p:["Scale-selective"]},
+    v_mixing:{s:"ePBL (default), KPP via CVMix",f:"ePBL",p:["Energetically constrained"]},
+    advection_t:{s:"PPM (Piecewise Parabolic)",f:"PPM",p:["3rd-order monotonic"]},
+    t_diffusion:{s:"Redi / GM neutral diffusion",f:"Redi-GM",p:["Along-isopycnal"]},
+    eos:{s:"Wright (1997)",f:"Wright",p:["Optimized for speed"]},
+    hydrostatic:{s:"Assumed",f:"Hydrostatic",p:[]},
+    continuity:{s:"Flux-form FV",f:"FV-flux",p:["Consistent with tracer"]},
+    barotropic:{s:"Split-explicit sub-stepping",f:"Split-explicit",p:["Time-averaged coupling"]},
+    vert_coord:{s:"ALE (z*, \u03C3, \u03C1, hybrid)",f:"ALE",p:["Runtime-selectable"]}
+  },
+  NEMO:{
+    tendency:{s:"Leapfrog+Asselin / RK3",f:"Leapfrog",p:["RK3 in NEMO 4.2+"]},
+    coriolis:{s:"EEN energy-enstrophy",f:"Energy-enstrophy",p:["Conserves both invariants"]},
+    pressure:{s:"Standard Jacobian",f:"Jacobian",p:["Density Jacobian for s-coord"]},
+    h_viscosity:{s:"Biharmonic iso-level",f:"Biharmonic",p:["Scale-selective"]},
+    v_mixing:{s:"TKE (default), GLS option",f:"TKE",p:["1.5-equation closure"]},
+    advection_t:{s:"TVD / MUSCL / UBS",f:"TVD",p:["Flux-limited"]},
+    t_diffusion:{s:"Redi isoneutral / GM",f:"Redi-GM",p:["Skew flux GM"]},
+    eos:{s:"TEOS-10",f:"TEOS-10",p:["Current international standard"]},
+    hydrostatic:{s:"Assumed",f:"Hydrostatic",p:[]},
+    continuity:{s:"Flux-form FD",f:"FD-flux",p:["z* volume conservation"]},
+    barotropic:{s:"Split-explicit (S-McW)",f:"Split-explicit",p:["Weighted time averaging"]},
+    vert_coord:{s:"z* / z-partial / s",f:"z-star",p:["Partial bottom cells"]}
+  },
+  ROMS:{
+    tendency:{s:"AB3 pred. + AM4 corr.",f:"AB3-AM4",p:["3rd-4th order accuracy"]},
+    coriolis:{s:"Flux-form Coriolis",f:"Flux-form",p:["Momentum-conserving"]},
+    pressure:{s:"Density Jacobian (Shchepetkin)",f:"Jacobian",p:["Reduced \u03C3-coord PGF error"]},
+    h_viscosity:{s:"Biharmonic / Smagorinsky",f:"Biharmonic",p:["Scale-selective"]},
+    v_mixing:{s:"KPP (default), GLS",f:"KPP",p:["Non-local transport"]},
+    advection_t:{s:"MPDATA / MUSCL / Akima",f:"MPDATA",p:["Iteratively anti-diffusive"]},
+    t_diffusion:{s:"Iso-sigma or rotated tensor",f:"Iso-sigma",p:["Along-coordinate default"]},
+    eos:{s:"Jackett-McDougall 1995",f:"JMD95",p:["Accurate pot. density"]},
+    hydrostatic:{s:"Assumed",f:"Hydrostatic",p:[]},
+    continuity:{s:"Flux-form in \u03C3-coordinates",f:"FV-flux",p:["Omega vertical velocity"]},
+    barotropic:{s:"Split-explicit (cosine filter)",f:"Split-explicit",p:["Forward-backward scheme"]},
+    vert_coord:{s:"Terrain-following s-coord",f:"Sigma",p:["4 stretching functions"]}
+  },
+  HYCOM:{
+    tendency:{s:"Leapfrog + Asselin",f:"Leapfrog",p:["Robert-Asselin damping"]},
+    coriolis:{s:"Vector-invariant / flux",f:"Energy-enstrophy",p:["Switchable"]},
+    pressure:{s:"Montgomery potential",f:"Montgomery",p:["Exact for isopycnal layers"]},
+    h_viscosity:{s:"Biharmonic / Laplacian",f:"Biharmonic",p:["Scale-selective"]},
+    v_mixing:{s:"KPP / MY2.5 / Kraus-Turner",f:"KPP",p:["Multiple closures"]},
+    advection_t:{s:"FCT",f:"FCT",p:["Positive-definite"]},
+    t_diffusion:{s:"Isopycnal / diapycnal",f:"Isopycnal",p:["Along-layer"]},
+    eos:{s:"\u03C3\u2080/\u03C3\u2082 polynomial",f:"Sigma-poly",p:["Thermobaric correction"]},
+    hydrostatic:{s:"Assumed",f:"Hydrostatic",p:[]},
+    continuity:{s:"Layer mass continuity",f:"Layer",p:["Isopycnal form"]},
+    barotropic:{s:"Split-explicit (leapfrog)",f:"Split-explicit",p:["Sub-stepping"]},
+    vert_coord:{s:"Hybrid (\u03C1/z/\u03C3)",f:"Hybrid",p:["Transitions dynamically"]}
+  },
+  MITgcm:{
+    tendency:{s:"Adams-Bashforth 2nd/3rd",f:"Adams-Bashforth",p:["Multi-step extrapolation"]},
+    coriolis:{s:"Vector-invariant / flux",f:"Energy-enstrophy",p:["Configurable"]},
+    pressure:{s:"FV + 2D/3D elliptic solve",f:"FV-elliptic",p:["CG Poisson solver"]},
+    h_viscosity:{s:"Laplacian / Biharmonic / Leith",f:"Multi-option",p:["Most options available"]},
+    v_mixing:{s:"KPP / GGL90 / PP",f:"KPP",p:["Via packages"]},
+    advection_t:{s:"Centered / DST3 / flux-limited",f:"DST3",p:["Up to 7th-order"]},
+    t_diffusion:{s:"Redi / GM or iso-level",f:"Redi-GM",p:["GM as bolus or skew flux"]},
+    eos:{s:"JMD95 / MDJWF / TEOS-10",f:"JMD95",p:["Multiple options"]},
+    hydrostatic:{s:"Hydrostatic or Non-hydrostatic",f:"NH-capable",p:["3D pressure Poisson solve"]},
+    continuity:{s:"FV flux form",f:"FV-flux",p:["Implicit free surface"]},
+    barotropic:{s:"Implicit free surface (2D CG)",f:"Implicit-FS",p:["No sub-stepping"]},
+    vert_coord:{s:"z / z* / \u03C3 / p / hybrid",f:"z-star",p:["Compile-time selection"]}
+  },
+  BLOM:{
+    tendency:{s:"Leapfrog + Asselin",f:"Leapfrog",p:["Three time levels"]},
+    coriolis:{s:"Flux form on C-grid",f:"Flux-form",p:[]},
+    pressure:{s:"Montgomery potential",f:"Montgomery",p:["Exact for isopycnal"]},
+    h_viscosity:{s:"Biharmonic",f:"Biharmonic",p:["Scale-selective"]},
+    v_mixing:{s:"Bulk mixed-layer model",f:"Bulk-ML",p:["Entrainment/detrainment"]},
+    advection_t:{s:"FCT",f:"FCT",p:["Positive-definite"]},
+    t_diffusion:{s:"Along-isopycnal",f:"Isopycnal",p:["Natural in isopycnal coords"]},
+    eos:{s:"\u03C3 polynomial",f:"Sigma-poly",p:["Reference density surfaces"]},
+    hydrostatic:{s:"Assumed",f:"Hydrostatic",p:[]},
+    continuity:{s:"Layer mass continuity",f:"Layer",p:[]},
+    barotropic:{s:"Split-explicit",f:"Split-explicit",p:[]},
+    vert_coord:{s:"Isopycnal (default) / ALE",f:"Isopycnal",p:["Pure density coords"]}
+  },
+  FESOM2:{
+    tendency:{s:"Euler / predictor-corrector",f:"Euler",p:["Asynchronous"]},
+    coriolis:{s:"Cell-vertex quasi-B-grid",f:"Quasi-B",p:["Unstructured mesh"]},
+    pressure:{s:"FV on Voronoi dual",f:"FV-unstructured",p:["Unstructured PGF"]},
+    h_viscosity:{s:"Smagorinsky / biharmonic",f:"Smagorinsky",p:["Flow-dependent"]},
+    v_mixing:{s:"KPP / TKE / PP",f:"KPP",p:["Multiple options"]},
+    advection_t:{s:"FCT on Voronoi volumes",f:"FCT",p:["Unstructured mesh"]},
+    t_diffusion:{s:"Redi / GM",f:"Redi-GM",p:["Isoneutral"]},
+    eos:{s:"JMD95 / TEOS-10",f:"JMD95",p:[]},
+    hydrostatic:{s:"Assumed",f:"Hydrostatic",p:[]},
+    continuity:{s:"FV on dual mesh",f:"FV-flux",p:["ALE regridding"]},
+    barotropic:{s:"Implicit free surface",f:"Implicit-FS",p:["No sub-stepping"]},
+    vert_coord:{s:"ALE (z / z* / \u03C3-z)",f:"ALE",p:["Flexible"]}
+  },
+  SCHISM:{
+    tendency:{s:"Semi-implicit + ELM",f:"Semi-implicit",p:["Unconditionally stable"]},
+    coriolis:{s:"Semi-implicit FE/FV",f:"Semi-implicit",p:[]},
+    pressure:{s:"Helmholtz solve (PCG/GMRES)",f:"FE-elliptic",p:["Global sparse solve"]},
+    h_viscosity:{s:"Smagorinsky / constant",f:"Smagorinsky",p:[]},
+    v_mixing:{s:"GLS (k-\u03B5)",f:"GLS",p:["Generic length scale"]},
+    advection_t:{s:"ELM (back-tracking)",f:"ELM",p:["Unconditionally stable","Not inherently conservative"]},
+    t_diffusion:{s:"Implicit vertical",f:"Implicit-vert",p:[]},
+    eos:{s:"UNESCO / TEOS-10",f:"UNESCO",p:[]},
+    hydrostatic:{s:"Hydrostatic or Non-hydrostatic",f:"NH-capable",p:["3D Poisson solve"]},
+    continuity:{s:"FE/FV on unstructured mesh",f:"FE-FV",p:[]},
+    barotropic:{s:"Semi-implicit Helmholtz",f:"Semi-implicit",p:["Single time step"]},
+    vert_coord:{s:"LSC\u00B2 (\u03C3-z, shaved cells)",f:"LSC2",p:["Localized sigma"]}
+  },
+  GETM:{
+    tendency:{s:"Forward Euler / RK2",f:"Euler",p:[]},
+    coriolis:{s:"C-grid semi-implicit",f:"Flux-form",p:[]},
+    pressure:{s:"Standard FD",f:"FD-standard",p:[]},
+    h_viscosity:{s:"Laplacian / Smagorinsky",f:"Smagorinsky",p:[]},
+    v_mixing:{s:"GOTM library (GLS)",f:"GLS",p:["Full GOTM turbulence"]},
+    advection_t:{s:"TVD (Superbee / MUSCL)",f:"TVD",p:["Flux-limited"]},
+    t_diffusion:{s:"Implicit vertical",f:"Implicit-vert",p:[]},
+    eos:{s:"UNESCO / TEOS-10",f:"UNESCO",p:[]},
+    hydrostatic:{s:"Assumed",f:"Hydrostatic",p:[]},
+    continuity:{s:"FD flux form",f:"FD-flux",p:[]},
+    barotropic:{s:"Split-explicit",f:"Split-explicit",p:[]},
+    vert_coord:{s:"GVC (\u03C3 / z / adaptive)",f:"GVC",p:["Adaptive option"]}
+  },
+  MOHID:{
+    tendency:{s:"ADI (Alternating Direction)",f:"ADI",p:["Unconditionally stable"]},
+    coriolis:{s:"Semi-implicit in ADI",f:"Semi-implicit",p:[]},
+    pressure:{s:"ADI implicit solve",f:"ADI",p:["Thomas algorithm"]},
+    h_viscosity:{s:"Smagorinsky / constant",f:"Smagorinsky",p:[]},
+    v_mixing:{s:"GOTM library (GLS)",f:"GLS",p:["Full GOTM turbulence"]},
+    advection_t:{s:"TVD / FCT",f:"TVD",p:["Flux-limited"]},
+    t_diffusion:{s:"Implicit vertical (C-N)",f:"Implicit-vert",p:[]},
+    eos:{s:"UNESCO / JMD95",f:"UNESCO",p:[]},
+    hydrostatic:{s:"Assumed",f:"Hydrostatic",p:[]},
+    continuity:{s:"Finite volume",f:"FV-flux",p:[]},
+    barotropic:{s:"ADI (no split needed)",f:"ADI",p:["Single time step"]},
+    vert_coord:{s:"Generic (\u03C3/z/Lagrangian)",f:"Generic",p:["Lagrangian option"]}
+  },
+  ADCIRC:{
+    tendency:{s:"Implicit Crank-Nicolson",f:"Implicit",p:["No CFL constraint"]},
+    coriolis:{s:"Galerkin FE (weak form)",f:"Galerkin-FE",p:[]},
+    pressure:{s:"GWCE formulation",f:"GWCE",p:["Avoids spurious modes"]},
+    h_viscosity:{s:"Eddy viscosity (constant/spatial)",f:"Constant-EV",p:[]},
+    v_mixing:{s:"Mellor-Yamada 2.5 (3D)",f:"MY2.5",p:["Two-equation closure"]},
+    advection_t:{s:"Galerkin FE",f:"Galerkin-FE",p:[]},
+    t_diffusion:{s:"Galerkin FE",f:"Galerkin-FE",p:[]},
+    eos:{s:"\u03C3-T (UNESCO-type)",f:"UNESCO",p:[]},
+    hydrostatic:{s:"Shallow water / hydrostatic",f:"Hydrostatic",p:[]},
+    continuity:{s:"GWCE reformulation",f:"GWCE",p:[]},
+    barotropic:{s:"Implicit FE solve (JCG)",f:"Implicit-FE",p:["Global sparse solve"]},
+    vert_coord:{s:"Sigma (3D) / none (2D)",f:"Sigma",p:[]}
+  },
+  GOTM:{
+    tendency:{s:"Implicit (backward Euler / C-N)",f:"Implicit",p:["1D column"]},
+    coriolis:{s:"Implicit u-v coupling",f:"Implicit",p:[]},
+    pressure:{s:"N/A (1D)",f:"N/A",p:[]},
+    h_viscosity:{s:"N/A (1D)",f:"N/A",p:[]},
+    v_mixing:{s:"GLS (k-\u03B5, k-\u03C9, MY2.5, generic)",f:"GLS",p:["Most comprehensive library"]},
+    advection_t:{s:"N/A (1D)",f:"N/A",p:[]},
+    t_diffusion:{s:"Implicit vertical",f:"Implicit-vert",p:[]},
+    eos:{s:"UNESCO / TEOS-10",f:"UNESCO",p:[]},
+    hydrostatic:{s:"1D column",f:"Hydrostatic",p:[]},
+    continuity:{s:"N/A (1D)",f:"N/A",p:[]},
+    barotropic:{s:"N/A (1D)",f:"N/A",p:[]},
+    vert_coord:{s:"z (1D column)",f:"z-1D",p:[]}
+  },
+  FUNWAVE:{
+    tendency:{s:"SSP-RK3",f:"SSP-RK3",p:["TVD-preserving"]},
+    coriolis:{s:"Explicit source term",f:"Explicit-source",p:[]},
+    pressure:{s:"Boussinesq dispersive terms",f:"Boussinesq-NH",p:["Tridiagonal dispersion solve"]},
+    h_viscosity:{s:"Breaking model (Kennedy)",f:"Breaking-EV",p:[]},
+    v_mixing:{s:"N/A (2DH)",f:"N/A",p:[]},
+    advection_t:{s:"MUSCL + HLL Riemann",f:"MUSCL-HLL",p:["Godunov-type shock-capturing"]},
+    t_diffusion:{s:"N/A",f:"N/A",p:[]},
+    eos:{s:"N/A",f:"N/A",p:[]},
+    hydrostatic:{s:"Non-hydrostatic (dispersive)",f:"Boussinesq-NH",p:[]},
+    continuity:{s:"Depth-integrated TVD",f:"TVD-flux",p:[]},
+    barotropic:{s:"Single-mode (no split)",f:"Single-mode",p:[]},
+    vert_coord:{s:"N/A (depth-integrated)",f:"None",p:[]}
+  },
+  XBeach:{
+    tendency:{s:"RK2 / Lax-Wendroff",f:"RK2",p:[]},
+    coriolis:{s:"Explicit source",f:"Explicit-source",p:[]},
+    pressure:{s:"NLSW + Keller-box option",f:"NLSW-NH",p:[]},
+    h_viscosity:{s:"Constant \u03BD_h",f:"Constant-EV",p:[]},
+    v_mixing:{s:"N/A (2DH)",f:"N/A",p:[]},
+    advection_t:{s:"Upwind / MUSCL-TVD",f:"Upwind",p:[]},
+    t_diffusion:{s:"N/A",f:"N/A",p:[]},
+    eos:{s:"N/A",f:"N/A",p:[]},
+    hydrostatic:{s:"Hydrostatic (NLSW)",f:"Hydrostatic",p:[]},
+    continuity:{s:"NLSW depth-integrated",f:"NLSW",p:[]},
+    barotropic:{s:"Single-mode (no split)",f:"Single-mode",p:[]},
+    vert_coord:{s:"N/A (depth-integrated)",f:"None",p:[]}
+  }
+};
+
+// ═══════════════════════════════════════
+// LAYOUT
+// ═══════════════════════════════════════
+let selectedTerm = null, activeFilter = 'all';
+const nodeEls = {}, lineEls = {};
+
+function layout() {
+  const ctr = document.getElementById('starContainer');
+  const svg = document.getElementById('starSvg');
+  const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+  const R = Math.min(window.innerWidth, window.innerHeight) * 0.36;
+  const cR = Math.min(130, window.innerWidth * 0.09);
+  const nR = Math.min(55, window.innerWidth * 0.045);
+
+  svg.innerHTML = '';
+  Object.keys(nodeEls).forEach(k => { if(nodeEls[k]?.parentNode) nodeEls[k].remove(); delete nodeEls[k]; });
+  document.querySelector('.center-node')?.remove();
+
+  // Orbit ring (very subtle)
+  const orbit = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  orbit.setAttribute('cx',cx); orbit.setAttribute('cy',cy); orbit.setAttribute('r',R);
+  orbit.setAttribute('fill','none'); orbit.setAttribute('stroke','rgba(120,160,200,0.04)');
+  orbit.setAttribute('stroke-width','1');
+  svg.appendChild(orbit);
+
+  // Center
+  const center = document.createElement('div');
+  center.className = 'center-node';
+  center.style.cssText = `width:${cR*2}px;height:${cR*2}px;left:${cx-cR}px;top:${cy-cR}px`;
+  center.innerHTML = `<div class="center-label">Governing Equations</div>
+    <div class="center-eq" id="centerEq"></div>
+    <div class="center-sublabel">14 ocean models</div>`;
+  ctr.appendChild(center);
+
+  setTimeout(() => {
+    const el = document.getElementById('centerEq');
+    if(el) katex.render('\\frac{D\\mathbf{u}}{Dt}+f\\hat{k}\\!\\times\\!\\mathbf{u}=-\\tfrac{1}{\\rho_0}\\nabla p+\\mathcal{D}+\\mathcal{F}', el, {displayMode:false,throwOnError:false});
+  }, 60);
+
+  // Terms
+  const N = equationTerms.length;
+  equationTerms.forEach((term, i) => {
+    const a = -Math.PI/2 + (2*Math.PI*i)/N;
+    const x = cx + R*Math.cos(a), y = cy + R*Math.sin(a);
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',cx); line.setAttribute('y1',cy);
+    line.setAttribute('x2',x); line.setAttribute('y2',y);
+    line.setAttribute('class','star-line');
+    line.dataset.term = term.id;
+    svg.appendChild(line);
+    lineEls[term.id] = line;
+
+    const node = document.createElement('div');
+    node.className = 'term-node';
+    node.dataset.type = term.type;
+    node.dataset.term = term.id;
+    node.style.cssText = `width:${nR*2}px;height:${nR*2}px;left:${x-nR}px;top:${y-nR}px`;
+    node.innerHTML = `<div class="term-label">${term.label}</div>
+      <div class="term-eq" id="teq_${term.id}"></div>
+      <div class="term-type-dot"></div>`;
+    node.addEventListener('click', () => selectTerm(term));
+    node.addEventListener('mouseenter', e => showTip(e, term));
+    node.addEventListener('mouseleave', hideTip);
+    ctr.appendChild(node);
+    nodeEls[term.id] = node;
+
+    setTimeout(() => {
+      const eq = document.getElementById('teq_'+term.id);
+      if(eq) katex.render(term.latex, eq, {displayMode:false,throwOnError:false,maxSize:2});
+    }, 80+i*15);
+  });
+
+  applyFilter();
+}
+
+// ═══════════════════════════════════════
+// INTERACTIONS
+// ═══════════════════════════════════════
+function selectTerm(term) {
+  document.getElementById('infoHint')?.classList.add('fade');
+  if(selectedTerm===term.id){ deselect(); return; }
+  selectedTerm = term.id;
+  Object.values(nodeEls).forEach(n=>n.classList.remove('selected'));
+  Object.values(lineEls).forEach(l=>l.classList.remove('highlight'));
+  nodeEls[term.id]?.classList.add('selected');
+  lineEls[term.id]?.classList.add('highlight');
+  renderPanel(term);
+  document.getElementById('detailPanel').classList.add('open');
+}
+
+function deselect() {
+  selectedTerm = null;
+  Object.values(nodeEls).forEach(n=>n.classList.remove('selected'));
+  Object.values(lineEls).forEach(l=>l.classList.remove('highlight'));
+  document.getElementById('detailPanel').classList.remove('open');
+}
+
+function showTip(e, term) {
+  const tt = document.getElementById('tooltip');
+  document.getElementById('tooltipTitle').textContent = term.label;
+  document.getElementById('tooltipBody').textContent = term.description;
+  tt.style.left = (e.clientX+14)+'px';
+  tt.style.top = (e.clientY-8)+'px';
+  tt.classList.add('visible');
+  setTimeout(()=>{
+    const r = tt.getBoundingClientRect();
+    if(r.right>window.innerWidth-16) tt.style.left=(e.clientX-r.width-14)+'px';
+    if(r.bottom>window.innerHeight-16) tt.style.top=(e.clientY-r.height-8)+'px';
+  },10);
+}
+
+function hideTip() { document.getElementById('tooltip').classList.remove('visible'); }
+
+function applyFilter() {
+  equationTerms.forEach(t => {
+    const vis = activeFilter==='all' || t.type===activeFilter;
+    nodeEls[t.id]?.classList.toggle('hidden',!vis);
+    if(lineEls[t.id]) lineEls[t.id].style.opacity = vis?1:0.05;
+  });
+}
+
+// ═══════════════════════════════════════
+// DETAIL PANEL
+// ═══════════════════════════════════════
+function renderPanel(term) {
+  const el = document.getElementById('detailContent');
+  const fm = {}; let fi = 0;
+  models.forEach(m => {
+    const d = D[m.id]?.[term.id];
+    if(d && d.f!=='N/A' && !(d.f in fm)) fm[d.f] = fi++;
+  });
+
+  let h = `<div class="detail-overline">${term.type}</div>
+    <div class="detail-title">${term.label}</div>
+    <div class="detail-continuous">
+      <div class="detail-continuous-label">continuous form</div>
+      <div class="detail-continuous-eq" id="pEq"></div>
+    </div>
+    <div class="detail-description">${term.physical}</div>
+    <div class="detail-section-title">Discretizations across models</div>
+    <table class="model-table"><thead><tr><th>Model</th><th>Scheme</th><th>Notes</th></tr></thead><tbody>`;
+
+  models.forEach(m => {
+    const d = D[m.id]?.[term.id];
+    if(!d) return;
+    const ci = d.f in fm ? fm[d.f]%6 : 0;
+    const tag = d.f!=='N/A' ? `<span class="scheme-tag sf-${ci}">${d.f}</span>` : `<span style="color:var(--text-lo);font-size:10px">n/a</span>`;
+    const props = d.p.length ? d.p.map(p=>`<div class="prop-item">${p}</div>`).join('') : '';
+    h += `<tr><td><div class="model-name" style="color:${m.color}">${m.name}</div><div class="model-org">${m.org}</div></td>
+      <td>${tag}<div class="scheme-detail">${d.s}</div></td><td>${props}</td></tr>`;
+  });
+
+  h += `</tbody></table><div class="detail-section-title">Scheme families</div>
+    <div class="detail-description" style="font-family:var(--sans);font-size:12px">
+    Models sharing a family tag use structurally equivalent discretizations for this term.
+    They are ideal controlled-experiment pairs: any output difference must originate from other mechanism axes.</div>`;
+
+  const fams = {};
+  models.forEach(m => { const d=D[m.id]?.[term.id]; if(d&&d.f!=='N/A'){if(!fams[d.f])fams[d.f]=[];fams[d.f].push(m.name);} });
+  Object.entries(fams).forEach(([f,ms]) => {
+    const ci = f in fm ? fm[f]%6 : 0;
+    h += `<div class="family-group"><span class="scheme-tag sf-${ci}">${f}</span><span class="family-models">${ms.join(', ')}</span></div>`;
+  });
+
+  el.innerHTML = h;
+  setTimeout(()=>{
+    const eq=document.getElementById('pEq');
+    if(eq) katex.render(term.latex,eq,{displayMode:true,throwOnError:false});
+  },50);
+}
+
+// ═══════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════
+document.querySelectorAll('.filter-btn').forEach(b => b.addEventListener('click',()=>{
+  document.querySelectorAll('.filter-btn').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  activeFilter = b.dataset.filter;
+  applyFilter();
+}));
+
+document.getElementById('detailClose').addEventListener('click', deselect);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') deselect(); });
+window.addEventListener('resize', ()=>{
+  layout();
+  if(selectedTerm){
+    nodeEls[selectedTerm]?.classList.add('selected');
+    lineEls[selectedTerm]?.classList.add('highlight');
+  }
+});
+
+window.addEventListener('DOMContentLoaded', layout);
+</script>
+</body>
+</html>
